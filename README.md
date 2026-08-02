@@ -73,6 +73,34 @@ After login, send the access token as `Authorization: Bearer <access-token>`. Fo
 refresh and logout, copy the `inovamedika_csrf` cookie value into the
 `X-CSRF-Token` header. Do not log or persist either token in browser storage.
 
+## Patient management
+
+Administrators and registration officers can use the following protected
+endpoints. Doctors are denied because clinical patient access must be scoped to
+an assigned visit through a separate clinical endpoint.
+
+- `GET /api/v1/patients?page=1&limit=10&search=` lists active patients. Search
+  matches medical record number, NIK, name, and phone number. `limit` is capped
+  at 100.
+- `GET /api/v1/patients/:id` returns administrative patient details.
+- `POST /api/v1/patients` creates a patient. The database generates the medical
+  record number; clients cannot choose or change it.
+- `PUT /api/v1/patients/:id` replaces the mutable administrative fields and
+  requires the latest `rowVersion` returned by the API.
+- `DELETE /api/v1/patients/:id` soft-deletes an unused patient. A patient with a
+  registration is preserved and returns `PATIENT_HAS_REGISTRATIONS`.
+
+Create and update payloads contain `nik`, `fullName`, `sex`, `dateOfBirth`,
+`phone`, and `address`. NIK is normalized to 16 digits and remains globally
+unique, including soft-deleted patients. Phone numbers are normalized for search
+while the user-entered format remains available for display. Expected conflicts
+use stable codes such as `PATIENT_NIK_EXISTS` and `PATIENT_VERSION_CONFLICT`.
+
+Patient list, search, view, create, update, failed write, and delete activity is
+recorded in the append-only audit trail. Audit metadata records the operation and
+changed field names, but never copies NIK, addresses, phone numbers, or complete
+patient payloads.
+
 ## Database workflow
 
 - `pnpm db:generate` generates the typed Prisma client into `src/generated/prisma`.
