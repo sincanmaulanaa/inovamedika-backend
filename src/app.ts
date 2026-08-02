@@ -17,9 +17,12 @@ import {
   type ReadinessCheck,
 } from './modules/health/health.repository.js'
 import { createHealthRouter } from './modules/health/health.routes.js'
+import { createAuthRouter } from './modules/auth/auth.routes.js'
+import { authService, type AuthService } from './modules/auth/auth.service.js'
 
 interface AppOptions {
   allowedOrigins?: readonly string[]
+  authenticationService?: AuthService
   readinessCheck?: ReadinessCheck
 }
 
@@ -63,7 +66,13 @@ const createCorsOptions = (allowedOrigins: readonly string[]): CorsOptions => {
         return
       }
 
-      callback(new DomainError('CORS_ORIGIN_NOT_ALLOWED', 403, 'Origin is not allowed'))
+      callback(
+        new DomainError(
+          'CORS_ORIGIN_NOT_ALLOWED',
+          403,
+          'Situs ini tidak diizinkan mengakses layanan.',
+        ),
+      )
     },
   }
 }
@@ -71,6 +80,7 @@ const createCorsOptions = (allowedOrigins: readonly string[]): CorsOptions => {
 export const createApp = (options: AppOptions = {}): Express => {
   const app = express()
   const allowedOrigins = options.allowedOrigins ?? [env.frontendOrigin]
+  const authenticationService = options.authenticationService ?? authService
   const readinessCheck = options.readinessCheck ?? createDatabaseReadinessCheck(prisma)
 
   app.disable('x-powered-by')
@@ -109,6 +119,7 @@ export const createApp = (options: AppOptions = {}): Express => {
   app.use(express.json({ limit: '100kb' }))
   app.use(cookieParser())
 
+  app.use('/api/v1', createAuthRouter({ allowedOrigins, service: authenticationService }))
   app.use('/api/v1/health', createHealthRouter(readinessCheck))
 
   app.use(notFoundHandler)

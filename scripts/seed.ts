@@ -149,6 +149,7 @@ const seedUsers = async (
         display_name: user.displayName,
         email: user.email,
         is_active: true,
+        password_hash: passwordHash,
         role: user.role,
       },
       where: { username: user.username },
