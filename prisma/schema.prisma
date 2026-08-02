@@ -1,0 +1,608 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  previewFeatures     = ["partialIndexes"]
+  importFileExtension = "js"
+  moduleFormat        = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model audit_logs {
+  id                                                                            BigInt                   @id @default(autoincrement())
+  public_id                                                                     String                   @unique(map: "audit_logs_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  occurred_at                                                                   DateTime                 @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  clinic_timezone                                                               String                   @default("Asia/Jakarta")
+  actor_user_id                                                                 BigInt?
+  actor_username_snapshot                                                       String?
+  actor_role_snapshot                                                           String?
+  session_id                                                                    BigInt?
+  patient_id                                                                    BigInt?
+  registration_id                                                               BigInt?
+  resource_type                                                                 String
+  resource_public_id                                                            String?                  @db.Uuid
+  before_version_id                                                             BigInt?
+  after_version_id                                                              BigInt?
+  action                                                                        String
+  outcome                                                                       String
+  purpose                                                                       String?
+  reason                                                                        String?
+  request_id                                                                    String
+  ip_address                                                                    String?                  @db.Inet
+  user_agent                                                                    String?
+  metadata                                                                      Json                     @default("{}")
+  users                                                                         users?                   @relation(fields: [actor_user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  medical_record_versions_audit_logs_after_version_idTomedical_record_versions  medical_record_versions? @relation("audit_logs_after_version_idTomedical_record_versions", fields: [after_version_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  medical_record_versions_audit_logs_before_version_idTomedical_record_versions medical_record_versions? @relation("audit_logs_before_version_idTomedical_record_versions", fields: [before_version_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  patients                                                                      patients?                @relation(fields: [patient_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  registrations                                                                 registrations?           @relation(fields: [registration_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  sessions                                                                      sessions?                @relation(fields: [session_id, actor_user_id], references: [id, user_id], onDelete: Restrict, onUpdate: NoAction, map: "audit_logs_session_actor_fk")
+
+  @@index([action, occurred_at(sort: Desc), id(sort: Desc)], map: "audit_logs_action_idx")
+  @@index([actor_user_id, occurred_at(sort: Desc), id(sort: Desc)], map: "audit_logs_actor_user_idx")
+  @@index([after_version_id])
+  @@index([before_version_id])
+  @@index([occurred_at(sort: Desc), id(sort: Desc)], map: "audit_logs_occurred_at_idx")
+  @@index([patient_id, occurred_at(sort: Desc), id(sort: Desc)], map: "audit_logs_patient_idx")
+  @@index([registration_id])
+  @@index([request_id, occurred_at(sort: Desc), id(sort: Desc)], map: "audit_logs_request_id_idx")
+  @@index([resource_type, resource_public_id, occurred_at(sort: Desc), id(sort: Desc)], map: "audit_logs_resource_idx")
+  @@index([session_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctors {
+  id                      BigInt                    @id @default(autoincrement())
+  public_id               String                    @unique(map: "doctors_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 BigInt                    @unique(map: "doctors_user_id_unique")
+  full_name               String
+  sip_number              String                    @unique(map: "doctors_sip_number_unique")
+  specialization          String?
+  is_active               Boolean                   @default(true)
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  users                   users                     @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+  medical_actions         medical_actions[]
+  medical_record_versions medical_record_versions[]
+  medical_records         medical_records[]
+  prescriptions           prescriptions[]
+  queue_lanes             queue_lanes[]
+  registrations           registrations[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model medical_actions {
+  id                        BigInt                  @id @default(autoincrement())
+  public_id                 String                  @unique(map: "medical_actions_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  medical_record_version_id BigInt
+  action_name               String
+  notes                     String?
+  sort_order                Int                     @default(1)
+  performed_by_doctor_id    BigInt
+  created_by_user_id        BigInt
+  created_at                DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime                @default(now()) @db.Timestamptz(6)
+  users                     users                   @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  medical_record_versions   medical_record_versions @relation(fields: [medical_record_version_id], references: [id], onUpdate: NoAction)
+  doctors                   doctors                 @relation(fields: [performed_by_doctor_id], references: [id], onUpdate: NoAction)
+
+  @@unique([medical_record_version_id, sort_order], map: "medical_actions_version_sort_unique")
+  @@index([created_by_user_id])
+  @@index([performed_by_doctor_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model medical_record_versions {
+  id                                                                          BigInt                    @id @default(autoincrement())
+  public_id                                                                   String                    @unique(map: "medical_record_versions_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  medical_record_id                                                           BigInt                    @unique(map: "medical_record_versions_one_draft_idx", where: raw("(status = 'DRAFT'::text)"))
+  version_number                                                              Int
+  version_kind                                                                String                    @default("INITIAL")
+  status                                                                      String                    @default("DRAFT")
+  supersedes_version_id                                                       BigInt?
+  author_doctor_id                                                            BigInt
+  subjective                                                                  String?
+  blood_pressure_systolic                                                     Int?                      @db.SmallInt
+  blood_pressure_diastolic                                                    Int?                      @db.SmallInt
+  temperature_celsius                                                         Decimal?                  @db.Decimal(4, 1)
+  weight_kg                                                                   Decimal?                  @db.Decimal(6, 2)
+  height_cm                                                                   Decimal?                  @db.Decimal(5, 2)
+  assessment                                                                  String?
+  plan                                                                        String?
+  correction_reason                                                           String?
+  finalized_at                                                                DateTime?                 @db.Timestamptz(6)
+  finalized_by_user_id                                                        BigInt?
+  approved_at                                                                 DateTime?                 @db.Timestamptz(6)
+  approved_by_user_id                                                         BigInt?
+  row_version                                                                 Int                       @default(1)
+  created_by_user_id                                                          BigInt
+  updated_by_user_id                                                          BigInt
+  created_at                                                                  DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at                                                                  DateTime                  @default(now()) @db.Timestamptz(6)
+  audit_logs_audit_logs_after_version_idTomedical_record_versions             audit_logs[]              @relation("audit_logs_after_version_idTomedical_record_versions")
+  audit_logs_audit_logs_before_version_idTomedical_record_versions            audit_logs[]              @relation("audit_logs_before_version_idTomedical_record_versions")
+  medical_actions                                                             medical_actions[]
+  users_medical_record_versions_approved_by_user_idTousers                    users?                    @relation("medical_record_versions_approved_by_user_idTousers", fields: [approved_by_user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  doctors                                                                     doctors                   @relation(fields: [author_doctor_id], references: [id], onUpdate: NoAction)
+  users_medical_record_versions_created_by_user_idTousers                     users                     @relation("medical_record_versions_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_medical_record_versions_finalized_by_user_idTousers                   users?                    @relation("medical_record_versions_finalized_by_user_idTousers", fields: [finalized_by_user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  medical_records_medical_record_versions_medical_record_idTomedical_records  medical_records           @relation("medical_record_versions_medical_record_idTomedical_records", fields: [medical_record_id], references: [id], onUpdate: NoAction)
+  medical_record_versions                                                     medical_record_versions?  @relation("medical_record_versionsTomedical_record_versions", fields: [supersedes_version_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  other_medical_record_versions                                               medical_record_versions[] @relation("medical_record_versionsTomedical_record_versions")
+  users_medical_record_versions_updated_by_user_idTousers                     users                     @relation("medical_record_versions_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  medical_records_medical_records_current_version_idTomedical_record_versions medical_records[]         @relation("medical_records_current_version_idTomedical_record_versions")
+  prescriptions                                                               prescriptions?
+
+  @@unique([medical_record_id, version_number], map: "medical_record_versions_number_unique")
+  @@index([approved_by_user_id])
+  @@index([author_doctor_id])
+  @@index([created_by_user_id])
+  @@index([finalized_by_user_id])
+  @@index([supersedes_version_id])
+  @@index([updated_by_user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model has constraints using non-default deferring rules and requires additional setup for migrations. Visit https://pris.ly/d/constraint-deferring for more info.
+model medical_records {
+  id                                                                                  BigInt                   @id @default(autoincrement())
+  public_id                                                                           String                   @unique(map: "medical_records_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  registration_id                                                                     BigInt                   @unique(map: "medical_records_registration_id_unique")
+  patient_id                                                                          BigInt
+  author_doctor_id                                                                    BigInt
+  current_version_id                                                                  BigInt?
+  lifecycle_status                                                                    String                   @default("DRAFT")
+  finalized_at                                                                        DateTime?                @db.Timestamptz(6)
+  row_version                                                                         Int                      @default(1)
+  created_by_user_id                                                                  BigInt
+  updated_by_user_id                                                                  BigInt
+  created_at                                                                          DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at                                                                          DateTime                 @default(now()) @db.Timestamptz(6)
+  medical_record_versions_medical_record_versions_medical_record_idTomedical_records  medical_record_versions? @relation("medical_record_versions_medical_record_idTomedical_records")
+  doctors                                                                             doctors                  @relation(fields: [author_doctor_id], references: [id], onUpdate: NoAction)
+  users_medical_records_created_by_user_idTousers                                     users                    @relation("medical_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  medical_record_versions_medical_records_current_version_idTomedical_record_versions medical_record_versions? @relation("medical_records_current_version_idTomedical_record_versions", fields: [current_version_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "medical_records_current_version_id_fk")
+  patients                                                                            patients                 @relation(fields: [patient_id], references: [id], onUpdate: NoAction)
+  registrations                                                                       registrations            @relation(fields: [registration_id, patient_id, author_doctor_id], references: [id, patient_id, doctor_id], onUpdate: NoAction, map: "medical_records_registration_identity_fk")
+  users_medical_records_updated_by_user_idTousers                                     users                    @relation("medical_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@unique([registration_id, patient_id, author_doctor_id], map: "medical_records_registration_identity_unique")
+  @@index([author_doctor_id])
+  @@index([created_by_user_id])
+  @@index([current_version_id])
+  @@index([patient_id, created_at(sort: Desc), id(sort: Desc)], map: "medical_records_patient_history_idx")
+  @@index([updated_by_user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model medications {
+  id                 BigInt               @id @default(autoincrement())
+  public_id          String               @unique(map: "medications_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code               String               @unique(map: "medications_code_unique")
+  name               String
+  dosage_form        String
+  strength           String
+  kfa_code           String?              @unique(map: "medications_kfa_code_unique", where: raw("(kfa_code IS NOT NULL)"))
+  is_active          Boolean              @default(true)
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime             @default(now()) @db.Timestamptz(6)
+  prescription_items prescription_items[]
+
+  @@index([name, id], map: "medications_active_name_idx", where: raw("is_active"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model patients {
+  id                                       BigInt            @id @default(autoincrement())
+  public_id                                String            @unique(map: "patients_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  medical_record_number                    String            @unique(map: "patients_medical_record_number_unique")
+  nik                                      String            @unique(map: "patients_nik_unique")
+  full_name                                String
+  sex                                      String
+  date_of_birth                            DateTime          @db.Date
+  phone                                    String?
+  normalized_phone                         String?
+  address                                  String?
+  row_version                              Int               @default(1)
+  deleted_at                               DateTime?         @db.Timestamptz(6)
+  deleted_by_user_id                       BigInt?
+  created_by_user_id                       BigInt
+  updated_by_user_id                       BigInt
+  created_at                               DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                               DateTime          @default(now()) @db.Timestamptz(6)
+  audit_logs                               audit_logs[]
+  medical_records                          medical_records[]
+  users_patients_created_by_user_idTousers users             @relation("patients_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_patients_deleted_by_user_idTousers users?            @relation("patients_deleted_by_user_idTousers", fields: [deleted_by_user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  users_patients_updated_by_user_idTousers users             @relation("patients_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  registrations                            registrations[]
+
+  @@index([created_at(sort: Desc), id(sort: Desc)], map: "patients_active_recent_idx", where: raw("(deleted_at IS NULL)"))
+  @@index([created_by_user_id])
+  @@index([deleted_by_user_id])
+  @@index([normalized_phone], where: raw("((normalized_phone IS NOT NULL) AND (deleted_at IS NULL))"))
+  @@index([updated_by_user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payers {
+  id            BigInt          @id @default(autoincrement())
+  public_id     String          @unique(map: "payers_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          String          @unique(map: "payers_code_unique")
+  name          String
+  payer_type    String
+  is_active     Boolean         @default(true)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
+  registrations registrations[]
+
+  @@index([payer_type, name, id], map: "payers_active_type_idx", where: raw("is_active"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model permissions {
+  id               BigInt             @id @default(autoincrement())
+  public_id        String             @unique(map: "permissions_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String             @unique(map: "permissions_code_unique")
+  description      String
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  user_permissions user_permissions[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model polyclinics {
+  id            BigInt          @id @default(autoincrement())
+  public_id     String          @unique(map: "polyclinics_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          String          @unique(map: "polyclinics_code_unique")
+  name          String
+  queue_prefix  String          @unique(map: "polyclinics_queue_prefix_unique")
+  is_active     Boolean         @default(true)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
+  queue_lanes   queue_lanes?
+  registrations registrations[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model prescription_items {
+  id                         BigInt        @id @default(autoincrement())
+  public_id                  String        @unique(map: "prescription_items_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  prescription_id            BigInt
+  medication_id              BigInt?
+  is_unmapped                Boolean       @default(false)
+  medication_name_snapshot   String?
+  dosage_form_snapshot       String?
+  strength_snapshot          String?
+  quantity                   Decimal?      @db.Decimal(10, 2)
+  quantity_unit              String?
+  dose_value                 Decimal?      @db.Decimal(10, 3)
+  dose_unit                  String?
+  frequency                  String?
+  route                      String?
+  duration_or_stop_condition String?
+  patient_instructions       String?
+  notes                      String?
+  not_applicable_reasons     Json          @default("{}")
+  sort_order                 Int           @default(1)
+  created_by_user_id         BigInt
+  created_at                 DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime      @default(now()) @db.Timestamptz(6)
+  users                      users         @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  medications                medications?  @relation(fields: [medication_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  prescriptions              prescriptions @relation(fields: [prescription_id], references: [id], onUpdate: NoAction)
+
+  @@unique([prescription_id, sort_order], map: "prescription_items_prescription_sort_unique")
+  @@index([created_by_user_id])
+  @@index([medication_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model prescriptions {
+  id                                              BigInt                  @id @default(autoincrement())
+  public_id                                       String                  @unique(map: "prescriptions_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  medical_record_version_id                       BigInt                  @unique(map: "prescriptions_medical_record_version_id_unique")
+  prescriber_doctor_id                            BigInt
+  prescriber_name_snapshot                        String?
+  prescriber_sip_snapshot                         String?
+  status                                          String                  @default("DRAFT")
+  prescribed_at                                   DateTime                @default(now()) @db.Timestamptz(6)
+  finalized_at                                    DateTime?               @db.Timestamptz(6)
+  finalized_by_user_id                            BigInt?
+  notes                                           String?
+  row_version                                     Int                     @default(1)
+  created_by_user_id                              BigInt
+  updated_by_user_id                              BigInt
+  created_at                                      DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime                @default(now()) @db.Timestamptz(6)
+  prescription_items                              prescription_items[]
+  users_prescriptions_created_by_user_idTousers   users                   @relation("prescriptions_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_prescriptions_finalized_by_user_idTousers users?                  @relation("prescriptions_finalized_by_user_idTousers", fields: [finalized_by_user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  medical_record_versions                         medical_record_versions @relation(fields: [medical_record_version_id], references: [id], onUpdate: NoAction)
+  doctors                                         doctors                 @relation(fields: [prescriber_doctor_id], references: [id], onUpdate: NoAction)
+  users_prescriptions_updated_by_user_idTousers   users                   @relation("prescriptions_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@index([created_by_user_id])
+  @@index([finalized_by_user_id])
+  @@index([prescriber_doctor_id])
+  @@index([updated_by_user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model queue_call_events {
+  id                BigInt   @id @default(autoincrement())
+  public_id         String   @unique(map: "queue_call_events_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queue_id          BigInt
+  call_number       Int
+  called_by_user_id BigInt
+  called_at         DateTime @default(now()) @db.Timestamptz(6)
+  users             users    @relation(fields: [called_by_user_id], references: [id], onUpdate: NoAction)
+  queues            queues   @relation(fields: [queue_id], references: [id], onUpdate: NoAction)
+
+  @@unique([queue_id, call_number], map: "queue_call_events_queue_call_number_unique")
+  @@index([called_at(sort: Desc), id(sort: Desc)], map: "queue_call_events_called_at_idx")
+  @@index([called_by_user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model queue_counters {
+  id                   BigInt      @id @default(autoincrement())
+  service_date         DateTime    @db.Date
+  queue_lane_id        BigInt
+  last_sequence_number BigInt      @default(0)
+  last_service_order   BigInt      @default(0)
+  created_at           DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime    @default(now()) @db.Timestamptz(6)
+  queue_lanes          queue_lanes @relation(fields: [queue_lane_id], references: [id], onUpdate: NoAction)
+
+  @@unique([service_date, queue_lane_id], map: "queue_counters_lane_date_unique")
+  @@index([queue_lane_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model queue_lanes {
+  id             BigInt           @id @default(autoincrement())
+  public_id      String           @unique(map: "queue_lanes_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  polyclinic_id  BigInt           @unique(map: "queue_lanes_polyclinic_id_unique")
+  doctor_id      BigInt
+  code           String           @unique(map: "queue_lanes_code_unique")
+  display_name   String
+  queue_prefix   String
+  is_active      Boolean          @default(true)
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime         @default(now()) @db.Timestamptz(6)
+  queue_counters queue_counters[]
+  doctors        doctors          @relation(fields: [doctor_id], references: [id], onUpdate: NoAction)
+  polyclinics    polyclinics      @relation(fields: [polyclinic_id], references: [id], onUpdate: NoAction)
+  queues         queues[]
+
+  @@index([doctor_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model queue_status_history {
+  id                 BigInt   @id @default(autoincrement())
+  public_id          String   @unique(map: "queue_status_history_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queue_id           BigInt
+  from_status        String?
+  to_status          String
+  reason             String?
+  changed_by_user_id BigInt
+  changed_at         DateTime @default(now()) @db.Timestamptz(6)
+  users              users    @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  queues             queues   @relation(fields: [queue_id], references: [id], onUpdate: NoAction)
+
+  @@index([changed_by_user_id])
+  @@index([queue_id, changed_at, id], map: "queue_status_history_queue_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model queues {
+  id                                     BigInt                 @id @default(autoincrement())
+  public_id                              String                 @unique(map: "queues_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  registration_id                        BigInt                 @unique(map: "queues_registration_id_unique")
+  queue_lane_id                          BigInt
+  service_date                           DateTime               @db.Date
+  sequence_number                        BigInt
+  service_order                          BigInt
+  display_number                         String
+  status                                 String                 @default("WAITING")
+  call_count                             Int                    @default(0)
+  last_called_at                         DateTime?              @db.Timestamptz(6)
+  skipped_at                             DateTime?              @db.Timestamptz(6)
+  requeued_at                            DateTime?              @db.Timestamptz(6)
+  serving_started_at                     DateTime?              @db.Timestamptz(6)
+  completed_at                           DateTime?              @db.Timestamptz(6)
+  cancelled_at                           DateTime?              @db.Timestamptz(6)
+  cancellation_reason                    String?
+  row_version                            Int                    @default(1)
+  created_by_user_id                     BigInt
+  updated_by_user_id                     BigInt
+  created_at                             DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at                             DateTime               @default(now()) @db.Timestamptz(6)
+  queue_call_events                      queue_call_events[]
+  queue_status_history                   queue_status_history[]
+  users_queues_created_by_user_idTousers users                  @relation("queues_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  queue_lanes                            queue_lanes            @relation(fields: [queue_lane_id], references: [id], onUpdate: NoAction)
+  registrations                          registrations          @relation(fields: [registration_id], references: [id], onUpdate: NoAction)
+  users_queues_updated_by_user_idTousers users                  @relation("queues_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@unique([service_date, queue_lane_id, display_number], map: "queues_display_number_unique")
+  @@unique([service_date, queue_lane_id], map: "queues_one_active_slot_per_lane_idx", where: raw("(status = ANY (ARRAY['CALLED'::text, 'SERVING'::text]))"))
+  @@unique([service_date, queue_lane_id, sequence_number], map: "queues_sequence_number_unique")
+  @@unique([service_date, queue_lane_id, service_order], map: "queues_service_order_unique")
+  @@index([created_by_user_id])
+  @@index([queue_lane_id, service_date, status, service_order, id], map: "queues_lane_status_order_idx")
+  @@index([updated_by_user_id])
+  @@index([queue_lane_id, service_date, service_order, id], map: "queues_waiting_call_next_idx", where: raw("(status = 'WAITING'::text)"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model registration_status_history {
+  id                 BigInt        @id @default(autoincrement())
+  public_id          String        @unique(map: "registration_status_history_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  registration_id    BigInt
+  from_status        String?
+  to_status          String
+  reason             String?
+  changed_by_user_id BigInt
+  changed_at         DateTime      @default(now()) @db.Timestamptz(6)
+  users              users         @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  registrations      registrations @relation(fields: [registration_id], references: [id], onUpdate: NoAction)
+
+  @@index([changed_by_user_id])
+  @@index([registration_id, changed_at, id], map: "registration_status_history_registration_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model registrations {
+  id                                            BigInt                        @id @default(autoincrement())
+  public_id                                     String                        @unique(map: "registrations_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  patient_id                                    BigInt
+  doctor_id                                     BigInt
+  polyclinic_id                                 BigInt
+  payer_id                                      BigInt?
+  related_registration_id                       BigInt?
+  service_date                                  DateTime                      @db.Date
+  financing_type                                String
+  payer_member_number                           String?
+  authorization_number                          String?
+  visit_reason                                  String
+  repeat_visit_reason                           String?
+  status                                        String                        @default("WAITING")
+  checked_in_at                                 DateTime?                     @db.Timestamptz(6)
+  exam_started_at                               DateTime?                     @db.Timestamptz(6)
+  completed_at                                  DateTime?                     @db.Timestamptz(6)
+  cancelled_at                                  DateTime?                     @db.Timestamptz(6)
+  cancelled_reason                              String?
+  no_show_at                                    DateTime?                     @db.Timestamptz(6)
+  no_show_reason                                String?
+  row_version                                   Int                           @default(1)
+  created_by_user_id                            BigInt
+  updated_by_user_id                            BigInt
+  created_at                                    DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                    DateTime                      @default(now()) @db.Timestamptz(6)
+  audit_logs                                    audit_logs[]
+  medical_records                               medical_records?
+  queues                                        queues?
+  registration_status_history                   registration_status_history[]
+  users_registrations_created_by_user_idTousers users                         @relation("registrations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  doctors                                       doctors                       @relation(fields: [doctor_id], references: [id], onUpdate: NoAction)
+  patients                                      patients                      @relation(fields: [patient_id], references: [id], onUpdate: NoAction)
+  payers                                        payers?                       @relation(fields: [payer_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  polyclinics                                   polyclinics                   @relation(fields: [polyclinic_id], references: [id], onUpdate: NoAction)
+  registrations                                 registrations?                @relation("registrationsToregistrations", fields: [related_registration_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  other_registrations                           registrations[]               @relation("registrationsToregistrations")
+  users_registrations_updated_by_user_idTousers users                         @relation("registrations_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@unique([id, patient_id, doctor_id], map: "registrations_id_patient_doctor_unique")
+  @@unique([patient_id, service_date, polyclinic_id], map: "registrations_one_active_visit_idx", where: raw("(status = ANY (ARRAY['WAITING'::text, 'CHECKED_IN'::text, 'IN_EXAM'::text]))"))
+  @@index([created_by_user_id])
+  @@index([doctor_id, service_date, status, id], map: "registrations_doctor_service_idx")
+  @@index([patient_id, service_date(sort: Desc), id(sort: Desc)], map: "registrations_patient_history_idx")
+  @@index([payer_id])
+  @@index([polyclinic_id, service_date, status, id], map: "registrations_polyclinic_service_idx")
+  @@index([related_registration_id])
+  @@index([service_date, status, id], map: "registrations_service_dashboard_idx")
+  @@index([updated_by_user_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sessions {
+  id                  BigInt       @id @default(autoincrement())
+  public_id           String       @unique(map: "sessions_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             BigInt       @unique(map: "sessions_one_active_per_user_idx", where: raw("(revoked_at IS NULL)"))
+  token_family_id     String       @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  refresh_token_hash  String       @unique(map: "sessions_refresh_token_hash_unique")
+  rotation_counter    Int          @default(0)
+  last_activity_at    DateTime     @default(now()) @db.Timestamptz(6)
+  idle_expires_at     DateTime     @db.Timestamptz(6)
+  absolute_expires_at DateTime     @db.Timestamptz(6)
+  last_rotated_at     DateTime?    @db.Timestamptz(6)
+  revoked_at          DateTime?    @db.Timestamptz(6)
+  revoked_reason      String?
+  ip_address          String?      @db.Inet
+  user_agent          String?
+  created_at          DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime     @default(now()) @db.Timestamptz(6)
+  audit_logs          audit_logs[]
+  users               users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id, user_id], map: "sessions_id_user_id_unique")
+  @@index([absolute_expires_at], map: "sessions_absolute_expiry_idx", where: raw("(revoked_at IS NULL)"))
+  @@index([user_id])
+}
+
+model user_permissions {
+  id                                               BigInt      @id @default(autoincrement())
+  user_id                                          BigInt
+  permission_id                                    BigInt
+  granted_by_user_id                               BigInt?
+  granted_at                                       DateTime    @default(now()) @db.Timestamptz(6)
+  users_user_permissions_granted_by_user_idTousers users?      @relation("user_permissions_granted_by_user_idTousers", fields: [granted_by_user_id], references: [id], onUpdate: NoAction)
+  permissions                                      permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_user_permissions_user_idTousers            users       @relation("user_permissions_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, permission_id], map: "user_permissions_user_permission_unique")
+  @@index([granted_by_user_id])
+  @@index([permission_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model users {
+  id                                                                          BigInt                        @id @default(autoincrement())
+  public_id                                                                   String                        @unique(map: "users_public_id_unique") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username                                                                    String                        @unique(map: "users_username_unique")
+  email                                                                       String?                       @unique(map: "users_email_unique", where: raw("(email IS NOT NULL)"))
+  display_name                                                                String
+  password_hash                                                               String
+  role                                                                        String
+  is_active                                                                   Boolean                       @default(true)
+  failed_login_attempts                                                       Int                           @default(0)
+  locked_until                                                                DateTime?                     @db.Timestamptz(6)
+  password_changed_at                                                         DateTime                      @default(now()) @db.Timestamptz(6)
+  last_login_at                                                               DateTime?                     @db.Timestamptz(6)
+  created_at                                                                  DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                                                  DateTime                      @default(now()) @db.Timestamptz(6)
+  audit_logs                                                                  audit_logs[]
+  doctors                                                                     doctors?
+  medical_actions                                                             medical_actions[]
+  medical_record_versions_medical_record_versions_approved_by_user_idTousers  medical_record_versions[]     @relation("medical_record_versions_approved_by_user_idTousers")
+  medical_record_versions_medical_record_versions_created_by_user_idTousers   medical_record_versions[]     @relation("medical_record_versions_created_by_user_idTousers")
+  medical_record_versions_medical_record_versions_finalized_by_user_idTousers medical_record_versions[]     @relation("medical_record_versions_finalized_by_user_idTousers")
+  medical_record_versions_medical_record_versions_updated_by_user_idTousers   medical_record_versions[]     @relation("medical_record_versions_updated_by_user_idTousers")
+  medical_records_medical_records_created_by_user_idTousers                   medical_records[]             @relation("medical_records_created_by_user_idTousers")
+  medical_records_medical_records_updated_by_user_idTousers                   medical_records[]             @relation("medical_records_updated_by_user_idTousers")
+  patients_patients_created_by_user_idTousers                                 patients[]                    @relation("patients_created_by_user_idTousers")
+  patients_patients_deleted_by_user_idTousers                                 patients[]                    @relation("patients_deleted_by_user_idTousers")
+  patients_patients_updated_by_user_idTousers                                 patients[]                    @relation("patients_updated_by_user_idTousers")
+  prescription_items                                                          prescription_items[]
+  prescriptions_prescriptions_created_by_user_idTousers                       prescriptions[]               @relation("prescriptions_created_by_user_idTousers")
+  prescriptions_prescriptions_finalized_by_user_idTousers                     prescriptions[]               @relation("prescriptions_finalized_by_user_idTousers")
+  prescriptions_prescriptions_updated_by_user_idTousers                       prescriptions[]               @relation("prescriptions_updated_by_user_idTousers")
+  queue_call_events                                                           queue_call_events[]
+  queue_status_history                                                        queue_status_history[]
+  queues_queues_created_by_user_idTousers                                     queues[]                      @relation("queues_created_by_user_idTousers")
+  queues_queues_updated_by_user_idTousers                                     queues[]                      @relation("queues_updated_by_user_idTousers")
+  registration_status_history                                                 registration_status_history[]
+  registrations_registrations_created_by_user_idTousers                       registrations[]               @relation("registrations_created_by_user_idTousers")
+  registrations_registrations_updated_by_user_idTousers                       registrations[]               @relation("registrations_updated_by_user_idTousers")
+  sessions                                                                    sessions?
+  user_permissions_user_permissions_granted_by_user_idTousers                 user_permissions[]            @relation("user_permissions_granted_by_user_idTousers")
+  user_permissions_user_permissions_user_idTousers                            user_permissions[]            @relation("user_permissions_user_idTousers")
+
+  @@index([role, id], map: "users_active_role_idx", where: raw("is_active"))
+}
