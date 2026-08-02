@@ -5,7 +5,7 @@ import { sendSuccess } from '../../http/response.js'
 import type { ReadinessCheck } from './health.repository.js'
 
 export const livenessHandler: RequestHandler = (_request, response) => {
-  sendSuccess(response, { status: 'alive' })
+  sendSuccess(response, { status: 'alive' }, 'Layanan tersedia')
 }
 
 export const createReadinessHandler = (checkReadiness: ReadinessCheck): RequestHandler => {
@@ -13,10 +13,16 @@ export const createReadinessHandler = (checkReadiness: ReadinessCheck): RequestH
     try {
       await checkReadiness()
     } catch {
-      next(new DomainError('SERVICE_NOT_READY', 503, 'Service is not ready'))
+      next(
+        new DomainError(
+          'SERVICE_NOT_READY',
+          503,
+          'Layanan belum siap digunakan. Coba lagi beberapa saat lagi.',
+        ),
+      )
       return
     }
 
-    sendSuccess(response, { status: 'ready' })
+    sendSuccess(response, { status: 'ready' }, 'Layanan siap digunakan')
   }
 }

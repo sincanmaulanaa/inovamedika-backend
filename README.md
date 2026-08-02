@@ -52,6 +52,27 @@ POSTGRES_PORT=55432 docker compose up -d postgres
 - `GET /api/v1/health/live` checks the HTTP process only.
 - `GET /api/v1/health/ready` checks the database and migration ledger.
 
+## Authentication
+
+- `POST /api/v1/login` accepts a username and password, then returns a 15-minute
+  access token and a concise user profile.
+- `POST /api/v1/refresh` rotates the opaque refresh credential and returns a new
+  access token. It requires the trusted frontend origin and matching CSRF cookie
+  and header values.
+- `POST /api/v1/logout` revokes the server-side session and clears both auth
+  cookies. It uses the same Origin and CSRF protection as refresh.
+
+The raw refresh credential is only sent through an `HttpOnly`, `SameSite=Strict`
+cookie; the database stores its SHA-256 hash. Access tokens are expected to stay
+in frontend memory and every protected request revalidates its session against
+the database. A session expires after 15 minutes without user activity or eight
+hours after login. Login from another device, logout, refresh-token replay, and
+changes to a user's password, role, or active status revoke the previous session.
+
+After login, send the access token as `Authorization: Bearer <access-token>`. For
+refresh and logout, copy the `inovamedika_csrf` cookie value into the
+`X-CSRF-Token` header. Do not log or persist either token in browser storage.
+
 ## Database workflow
 
 - `pnpm db:generate` generates the typed Prisma client into `src/generated/prisma`.
@@ -60,7 +81,8 @@ POSTGRES_PORT=55432 docker compose up -d postgres
 - Applied migrations must never be edited after merge; create a new migration.
 - `pnpm db:seed` is idempotent and refuses to run outside development/test.
 - Seeded accounts are `admin`, `registration`, and `doctor`. Their shared local
-  password comes from `DEMO_USER_PASSWORD`; never use the demo seed in production.
+  password is reset from `DEMO_USER_PASSWORD` on every seed; never use the demo
+  seed in production.
 
 Prisma is the application data-access layer. SQL migrations remain authoritative
 for PostgreSQL features that Prisma cannot fully express, including CHECK

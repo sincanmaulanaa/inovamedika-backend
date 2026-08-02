@@ -17,7 +17,7 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
   if (hasErrorType(error, 'entity.parse.failed')) {
     response.status(400).json({
       success: false,
-      message: 'Request body contains invalid JSON',
+      message: 'Data belum dapat dikirim. Muat ulang halaman lalu coba lagi.',
       code: 'INVALID_JSON',
       requestId,
     })
@@ -27,7 +27,7 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
   if (hasErrorType(error, 'entity.too.large')) {
     response.status(413).json({
       success: false,
-      message: 'Request body is too large',
+      message: 'Data yang dikirim terlalu besar. Kurangi ukuran data lalu coba lagi.',
       code: 'PAYLOAD_TOO_LARGE',
       requestId,
     })
@@ -37,9 +37,9 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
   if (error instanceof ZodError) {
     response.status(422).json({
       success: false,
-      message: 'Validation error',
+      message: 'Beberapa data belum sesuai. Periksa kembali kolom yang ditandai.',
       code: 'VALIDATION_ERROR',
-      errors: error.flatten(),
+      errors: error.flatten().fieldErrors,
       requestId,
     })
     return
@@ -59,7 +59,7 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
   logger.error({ error, requestId }, 'Unhandled request error')
   response.status(500).json({
     success: false,
-    message: 'An unexpected error occurred',
+    message: 'Layanan sedang mengalami kendala. Coba lagi beberapa saat lagi.',
     code: 'INTERNAL_ERROR',
     requestId,
   })

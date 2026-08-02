@@ -19,7 +19,7 @@ describe('HTTP application foundation', () => {
     expect(response.headers['x-powered-by']).toBeUndefined()
     expect(response.body).toEqual({
       success: true,
-      message: 'Success',
+      message: 'Layanan tersedia',
       data: { status: 'alive' },
     })
     expect(readinessCheck).not.toHaveBeenCalled()
@@ -34,7 +34,7 @@ describe('HTTP application foundation', () => {
     expect(response.status).toBe(200)
     expect(response.body).toEqual({
       success: true,
-      message: 'Success',
+      message: 'Layanan siap digunakan',
       data: { status: 'ready' },
     })
     expect(readinessCheck).toHaveBeenCalledOnce()
@@ -53,7 +53,7 @@ describe('HTTP application foundation', () => {
     expect(response.status).toBe(503)
     expect(response.body).toEqual({
       success: false,
-      message: 'Service is not ready',
+      message: 'Layanan belum siap digunakan. Coba lagi beberapa saat lagi.',
       code: 'SERVICE_NOT_READY',
       requestId: 'readiness-test',
     })
@@ -67,7 +67,7 @@ describe('HTTP application foundation', () => {
     expect(response.status).toBe(404)
     expect(response.body).toEqual({
       success: false,
-      message: 'Route GET /api/v1/unknown not found',
+      message: 'Layanan yang diminta tidak ditemukan. Periksa kembali alamat yang digunakan.',
       code: 'ROUTE_NOT_FOUND',
       requestId: 'not-found-test',
     })
@@ -85,7 +85,7 @@ describe('HTTP application foundation', () => {
     expect(response.status).toBe(400)
     expect(response.body).toEqual({
       success: false,
-      message: 'Request body contains invalid JSON',
+      message: 'Data belum dapat dikirim. Muat ulang halaman lalu coba lagi.',
       code: 'INVALID_JSON',
       requestId: 'invalid-json-test',
     })
@@ -102,7 +102,7 @@ describe('HTTP application foundation', () => {
     expect(response.status).toBe(413)
     expect(response.body).toEqual({
       success: false,
-      message: 'Request body is too large',
+      message: 'Data yang dikirim terlalu besar. Kurangi ukuran data lalu coba lagi.',
       code: 'PAYLOAD_TOO_LARGE',
       requestId: 'large-payload-test',
     })
@@ -123,7 +123,7 @@ describe('HTTP application foundation', () => {
     expect(response.headers['access-control-allow-origin']).toBeUndefined()
     expect(response.body).toEqual({
       success: false,
-      message: 'Origin is not allowed',
+      message: 'Situs ini tidak diizinkan mengakses layanan.',
       code: 'CORS_ORIGIN_NOT_ALLOWED',
       requestId: 'cors-test',
     })
