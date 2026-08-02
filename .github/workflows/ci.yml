@@ -65,6 +65,9 @@ jobs:
 
       - name: Run code quality checks
         run: pnpm check:code
+        env:
+          DATABASE_TESTS: '1'
+          NODE_ENV: test
 
       - name: Verify migration status
         run: pnpm db:migrate:status
