@@ -14,6 +14,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
+    "env:init": "node scripts/init-local-env.mjs",
     "lint": "oxlint --deny-warnings src scripts test",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
@@ -27,7 +28,9 @@
     "db:seed": "prisma db seed",
     "postinstall": "prisma generate",
     "quality:duplication": "jscpd src scripts --config .jscpd.json",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm quality:duplication"
+    "security:secrets": "gitleaks git --staged --redact --no-banner && gitleaks git --redact --no-banner --log-opts=--all",
+    "check:code": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm quality:duplication",
+    "check": "pnpm security:secrets && pnpm check:code"
   },
   "keywords": [
     "clinic",
