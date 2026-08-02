@@ -50,7 +50,7 @@ jobs:
           cache: pnpm
 
       - name: Create ephemeral local environment
-        run: pnpm env:init
+        run: node scripts/init-local-env.mjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
