@@ -21,29 +21,38 @@ const loginSchema = z.object({
     .max(64, 'Nama pengguna tidak dapat melebihi 64 karakter.'),
 })
 
-const baseCookieOptions: CookieOptions = {
-  path: '/api/v1',
+const sharedCookieOptions: CookieOptions = {
   sameSite: 'strict',
   secure: env.nodeEnv === 'production',
 }
 
+const refreshCookieOptions: CookieOptions = {
+  ...sharedCookieOptions,
+  httpOnly: true,
+  path: '/api/v1',
+}
+
+const csrfCookieOptions: CookieOptions = {
+  ...sharedCookieOptions,
+  httpOnly: false,
+  path: '/',
+}
+
 const clearAuthCookies = (response: Parameters<RequestHandler>[1]): void => {
-  response.clearCookie(authCookieNames.refresh, { ...baseCookieOptions, httpOnly: true })
-  response.clearCookie(authCookieNames.csrf, { ...baseCookieOptions, httpOnly: false })
+  response.clearCookie(authCookieNames.refresh, refreshCookieOptions)
+  response.clearCookie(authCookieNames.csrf, csrfCookieOptions)
 }
 
 const setAuthCookies = (response: Parameters<RequestHandler>[1], session: IssuedSession): void => {
   const expires = new Date(session.sessionExpiresAt)
 
   response.cookie(authCookieNames.refresh, session.refreshToken, {
-    ...baseCookieOptions,
+    ...refreshCookieOptions,
     expires,
-    httpOnly: true,
   })
   response.cookie(authCookieNames.csrf, session.csrfToken, {
-    ...baseCookieOptions,
+    ...csrfCookieOptions,
     expires,
-    httpOnly: false,
   })
 }
 

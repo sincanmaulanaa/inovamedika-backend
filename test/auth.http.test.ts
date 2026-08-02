@@ -112,6 +112,8 @@ describe('authentication HTTP contract', () => {
     expect(refreshCookie).toContain('SameSite=Strict')
     expect(refreshCookie).toContain('Path=/api/v1')
     expect(csrfCookie).not.toContain('HttpOnly')
+    expect(csrfCookie?.split('; ')).toContain('Path=/')
+    expect(csrfCookie?.split('; ')).not.toContain('Path=/api/v1')
     expect(service.login).toHaveBeenCalledWith(
       expect.objectContaining({
         password: 'valid-password',
@@ -195,7 +197,17 @@ describe('authentication HTTP contract', () => {
 
     expect(logoutResponse.status).toBe(200)
     expect(logoutResponse.body).toEqual({ data: null, message: 'Anda telah keluar', success: true })
-    expect(getSetCookies(logoutResponse).every((cookie) => cookie.includes('Expires='))).toBe(true)
+    const clearedCookies = getSetCookies(logoutResponse)
+    const clearedRefreshCookie = clearedCookies.find((value) =>
+      value.startsWith(`${authCookieNames.refresh}=`),
+    )
+    const clearedCsrfCookie = clearedCookies.find((value) =>
+      value.startsWith(`${authCookieNames.csrf}=`),
+    )
+
+    expect(clearedCookies.every((cookie) => cookie.includes('Expires='))).toBe(true)
+    expect(clearedRefreshCookie?.split('; ')).toContain('Path=/api/v1')
+    expect(clearedCsrfCookie?.split('; ')).toContain('Path=/')
     expect(service.logout).toHaveBeenCalledOnce()
   })
 })
