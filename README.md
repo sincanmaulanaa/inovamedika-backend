@@ -8,12 +8,13 @@ The codebase is a standalone strict-TypeScript modular monolith with Prisma ORM.
 - Node.js 22.12 or newer; Node.js 24 LTS recommended for production
 - pnpm 11.18 or newer within major version 11
 - PostgreSQL 17, normally provided by Docker Compose
+- Gitleaks 8.30 or newer for local secret checks
 
 ## Setup
 
 ```bash
-cp .env.example .env
 corepack enable pnpm
+pnpm env:init
 pnpm install --frozen-lockfile
 docker compose up -d postgres
 pnpm db:migrate
@@ -21,8 +22,11 @@ pnpm db:seed
 pnpm dev
 ```
 
-`.env.example` is intentionally empty. Define these variables only in the ignored
-local `.env` file, CI secret storage, or the deployment platform's secret manager:
+`.env.example` is intentionally empty. `pnpm env:init` creates an ignored `.env`
+with unique random database credentials, a JWT secret, and a demo password. The
+command refuses to overwrite an existing file and creates it with owner-only file
+permissions. Define production values only in the deployment platform's secret
+manager:
 
 - Runtime: `DATABASE_URL`, `JWT_ACCESS_SECRET`
 - Database administration: `MIGRATION_DATABASE_URL`
@@ -32,7 +36,7 @@ local `.env` file, CI secret storage, or the deployment platform's secret manage
   `LOG_LEVEL`, `DB_POOL_MAX`, `JWT_ISSUER`, `JWT_AUDIENCE`
 
 The repository does not provide default passwords, tokens, or database connection
-strings. Generate unique local values and never reuse production credentials.
+strings. Never reuse generated development credentials in production.
 
 The API listens on `http://localhost:3000/api/v1` by default.
 
@@ -86,19 +90,28 @@ pre-commit and pre-push checks once after cloning:
 
 ```bash
 git config core.hooksPath .githooks
-gitleaks git --redact --no-banner --log-opts="--all"
+pnpm security:secrets
 ```
+
+GitHub Actions repeats the full-history secret scan and code quality checks on
+every push and pull request. Its database credentials and application secrets are
+generated inside the disposable runner and are never stored in the repository.
+Dependabot checks pnpm and GitHub Actions dependencies weekly; security updates
+are enabled in the repository settings.
 
 ## Commands
 
 ```bash
 pnpm dev
+pnpm env:init
 pnpm format
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 pnpm quality:duplication
+pnpm security:secrets
+pnpm check:code
 pnpm check
 ```
 
