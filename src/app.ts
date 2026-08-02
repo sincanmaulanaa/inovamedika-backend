@@ -19,10 +19,13 @@ import {
 import { createHealthRouter } from './modules/health/health.routes.js'
 import { createAuthRouter } from './modules/auth/auth.routes.js'
 import { authService, type AuthService } from './modules/auth/auth.service.js'
+import { createPatientRouter } from './modules/patients/patient.routes.js'
+import { patientService, type PatientService } from './modules/patients/patient.service.js'
 
 interface AppOptions {
   allowedOrigins?: readonly string[]
   authenticationService?: AuthService
+  patientManagementService?: PatientService
   readinessCheck?: ReadinessCheck
 }
 
@@ -81,6 +84,7 @@ export const createApp = (options: AppOptions = {}): Express => {
   const app = express()
   const allowedOrigins = options.allowedOrigins ?? [env.frontendOrigin]
   const authenticationService = options.authenticationService ?? authService
+  const patientManagementService = options.patientManagementService ?? patientService
   const readinessCheck = options.readinessCheck ?? createDatabaseReadinessCheck(prisma)
 
   app.disable('x-powered-by')
@@ -120,6 +124,13 @@ export const createApp = (options: AppOptions = {}): Express => {
   app.use(cookieParser())
 
   app.use('/api/v1', createAuthRouter({ allowedOrigins, service: authenticationService }))
+  app.use(
+    '/api/v1/patients',
+    createPatientRouter({
+      authenticationService,
+      service: patientManagementService,
+    }),
+  )
   app.use('/api/v1/health', createHealthRouter(readinessCheck))
 
   app.use(notFoundHandler)
