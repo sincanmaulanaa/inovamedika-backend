@@ -3,3 +3,4 @@ allowBuilds:
   'argon2@0.45.1': true
   'esbuild@0.28.1': true
   'prisma@7.9.1': true
+  puppeteer: set this to true or false

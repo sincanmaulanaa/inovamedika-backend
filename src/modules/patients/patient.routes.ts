@@ -27,13 +27,16 @@ export const createPatientRouter = ({
 }: CreatePatientRouterInput): Router => {
   const router = Router()
 
+  const readRoles = ['ADMINISTRATOR', 'REGISTRATION_OFFICER', 'DOCTOR'] as const
+
   router.use(createAuthenticationMiddleware(authenticationService))
-  router.use(createRoleAuthorizationMiddleware(authenticationService, patientManagementRoles))
-  router.get('/', listPatientsHandler(service))
-  router.get('/:id', getPatientHandler(service))
-  router.post('/', createPatientHandler(service))
-  router.put('/:id', updatePatientHandler(service))
-  router.delete('/:id', deletePatientHandler(service))
+  
+  router.get('/', createRoleAuthorizationMiddleware(authenticationService, readRoles), listPatientsHandler(service))
+  router.get('/:id', createRoleAuthorizationMiddleware(authenticationService, readRoles), getPatientHandler(service))
+  
+  router.post('/', createRoleAuthorizationMiddleware(authenticationService, patientManagementRoles), createPatientHandler(service))
+  router.put('/:id', createRoleAuthorizationMiddleware(authenticationService, patientManagementRoles), updatePatientHandler(service))
+  router.delete('/:id', createRoleAuthorizationMiddleware(authenticationService, patientManagementRoles), deletePatientHandler(service))
 
   return router
 }
