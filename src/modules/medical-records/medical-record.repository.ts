@@ -4,6 +4,7 @@ import { withTransaction } from '../../db/transaction.js'
 import type { AuthRequestMetadata, AuthenticatedPrincipal } from '../auth/auth.types.js'
 import {
   medicalRecordStatuses,
+  type MedicalActionMutationData,
   type MedicalRecordListQuery,
   type MedicalRecordRecord,
   type MedicalRecordStatus,
@@ -26,7 +27,11 @@ interface MedicalRecordRow {
   readonly polyclinic_name: string
   readonly visit_date: Date
   readonly subjective: string | null
-  readonly objective: string | null
+  readonly blood_pressure_systolic: number | null
+  readonly blood_pressure_diastolic: number | null
+  readonly temperature_celsius: number | null
+  readonly weight_kg: number | null
+  readonly height_cm: number | null
   readonly assessment: string | null
   readonly plan: string | null
   readonly status: string
@@ -35,6 +40,7 @@ interface MedicalRecordRow {
   readonly row_version: number
   readonly created_at: Date
   readonly updated_at: Date
+  readonly actions_json: string | null
 }
 
 interface MedicalRecordRepositoryContext {
@@ -56,18 +62,28 @@ interface AuditInput extends MedicalRecordRepositoryContext {
 export interface CreateMedicalRecordInput extends MedicalRecordRepositoryContext {
   readonly registrationPublicId: string
   readonly subjective: string | null
-  readonly objective: string | null
+  readonly bloodPressureSystolic: number | null
+  readonly bloodPressureDiastolic: number | null
+  readonly temperatureCelsius: number | null
+  readonly weightKg: number | null
+  readonly heightCm: number | null
   readonly assessment: string | null
   readonly plan: string | null
+  readonly actions: readonly MedicalActionMutationData[]
 }
 
 export interface UpdateMedicalRecordInput extends MedicalRecordRepositoryContext {
   readonly medicalRecordPublicId: string
   readonly rowVersion: number
   readonly subjective?: string | null | undefined
-  readonly objective?: string | null | undefined
+  readonly bloodPressureSystolic?: number | null | undefined
+  readonly bloodPressureDiastolic?: number | null | undefined
+  readonly temperatureCelsius?: number | null | undefined
+  readonly weightKg?: number | null | undefined
+  readonly heightCm?: number | null | undefined
   readonly assessment?: string | null | undefined
   readonly plan?: string | null | undefined
+  readonly actions?: readonly MedicalActionMutationData[] | undefined
   readonly amendmentReason?: string | null | undefined
   readonly status?: MedicalRecordStatus | undefined
   readonly finalizedAt?: boolean | undefined
@@ -143,60 +159,82 @@ const recordColumns = Prisma.sql`
   p.medical_record_number as patient_mrn,
   mr.registration_id,
   r.public_id as registration_public_id,
-  mr.doctor_id,
+  mr.author_doctor_id as doctor_id,
   d.public_id as doctor_public_id,
   d.full_name as doctor_name,
-  mr.polyclinic_id,
+  r.polyclinic_id,
   pol.public_id as polyclinic_public_id,
   pol.name as polyclinic_name,
-  mr.visit_date,
-  mr.subjective,
-  mr.objective,
-  mr.assessment,
-  mr.plan,
-  mr.status,
-  mr.amendment_reason,
+  r.service_date as visit_date,
+  mrv.subjective,
+  mrv.blood_pressure_systolic,
+  mrv.blood_pressure_diastolic,
+  mrv.temperature_celsius,
+  mrv.weight_kg,
+  mrv.height_cm,
+  mrv.assessment,
+  mrv.plan,
+  mr.lifecycle_status as status,
+  mrv.correction_reason as amendment_reason,
   mr.finalized_at,
   mr.row_version,
   mr.created_at,
-  mr.updated_at
+  mr.updated_at,
+  (
+    select json_agg(json_build_object(
+      'id', a.public_id,
+      'actionName', a.action_name,
+      'notes', a.notes
+    ) order by a.sort_order asc)
+    from public.medical_actions a
+    where a.medical_record_version_id = mrv.id
+  ) as actions_json
 `
 
 const recordJoins = Prisma.sql`
   from public.medical_records mr
+  left join public.medical_record_versions mrv on mrv.id = mr.current_version_id
   join public.patients p on p.id = mr.patient_id
   join public.registrations r on r.id = mr.registration_id
-  join public.doctors d on d.id = mr.doctor_id
-  join public.polyclinics pol on pol.id = mr.polyclinic_id
+  join public.doctors d on d.id = mr.author_doctor_id
+  join public.polyclinics pol on pol.id = r.polyclinic_id
 `
 
-const mapMedicalRecordRow = (row: MedicalRecordRow): MedicalRecordRecord => ({
-  amendmentReason: row.amendment_reason,
-  assessment: row.assessment,
-  createdAt: row.created_at,
-  doctorId: row.doctor_id,
-  doctorName: row.doctor_name,
-  doctorPublicId: row.doctor_public_id,
-  finalizedAt: row.finalized_at,
-  id: row.id,
-  objective: row.objective,
-  patientId: row.patient_id,
-  patientMedicalRecordNumber: row.patient_mrn,
-  patientName: row.patient_name,
-  patientPublicId: row.patient_public_id,
-  plan: row.plan,
-  polyclinicId: row.polyclinic_id,
-  polyclinicName: row.polyclinic_name,
-  polyclinicPublicId: row.polyclinic_public_id,
-  publicId: row.public_id,
-  registrationId: row.registration_id,
-  registrationPublicId: row.registration_public_id,
-  rowVersion: row.row_version,
-  status: parseMedicalRecordStatus(row.status),
-  subjective: row.subjective,
-  updatedAt: row.updated_at,
-  visitDate: row.visit_date,
-})
+const mapMedicalRecordRow = (row: MedicalRecordRow): MedicalRecordRecord => {
+  const parsedActions = row.actions_json ? JSON.parse(row.actions_json) : []
+  return {
+    amendmentReason: row.amendment_reason,
+    assessment: row.assessment,
+    bloodPressureDiastolic: row.blood_pressure_diastolic ? Number(row.blood_pressure_diastolic) : null,
+    bloodPressureSystolic: row.blood_pressure_systolic ? Number(row.blood_pressure_systolic) : null,
+    createdAt: row.created_at,
+    doctorId: row.doctor_id,
+    doctorName: row.doctor_name,
+    doctorPublicId: row.doctor_public_id,
+    finalizedAt: row.finalized_at,
+    heightCm: row.height_cm ? Number(row.height_cm) : null,
+    id: row.id,
+    patientId: row.patient_id,
+    patientMedicalRecordNumber: row.patient_mrn,
+    patientName: row.patient_name,
+    patientPublicId: row.patient_public_id,
+    plan: row.plan,
+    polyclinicId: row.polyclinic_id,
+    polyclinicName: row.polyclinic_name,
+    polyclinicPublicId: row.polyclinic_public_id,
+    publicId: row.public_id,
+    registrationId: row.registration_id,
+    registrationPublicId: row.registration_public_id,
+    rowVersion: row.row_version,
+    status: parseMedicalRecordStatus(row.status),
+    subjective: row.subjective,
+    temperatureCelsius: row.temperature_celsius ? Number(row.temperature_celsius) : null,
+    updatedAt: row.updated_at,
+    visitDate: row.visit_date,
+    weightKg: row.weight_kg ? Number(row.weight_kg) : null,
+    actions: parsedActions,
+  }
+}
 
 const createAudit = async (
   transaction: Prisma.TransactionClient,
@@ -215,21 +253,6 @@ const createAudit = async (
       ${input.action}, ${input.outcome}, ${input.reason ?? null},
       ${input.metadata.requestId}, cast(${input.metadata.ipAddress ?? null} as inet), ${input.metadata.userAgent ?? null}, cast(${metadata} as jsonb)
     )
-  `
-}
-
-const insertHistory = async (
-  transaction: Prisma.TransactionClient,
-  id: bigint,
-  userId: bigint,
-): Promise<void> => {
-  await transaction.$executeRaw`
-    insert into public.medical_record_history (
-      medical_record_id, subjective, objective, assessment, plan,
-      status, amendment_reason, changed_by_user_id
-    )
-    select id, subjective, objective, assessment, plan, status, amendment_reason, ${userId}
-    from public.medical_records where id = ${id}
   `
 }
 
@@ -279,19 +302,53 @@ export const medicalRecordRepository: MedicalRecordRepository = {
         readonly { readonly id: bigint; readonly public_id: string }[]
       >`
         insert into public.medical_records (
-          patient_id, registration_id, doctor_id, polyclinic_id, visit_date,
-          subjective, objective, assessment, plan, status,
+          registration_id, patient_id, author_doctor_id,
+          lifecycle_status,
           created_by_user_id, updated_by_user_id
         ) values (
-          ${registration.patient_id}, ${registration.id}, ${registration.doctor_id}, ${registration.polyclinic_id}, cast(${registration.service_date} as date),
-          ${input.subjective}, ${input.objective}, ${input.assessment}, ${input.plan}, 'DRAFT',
+          ${registration.id}, ${registration.patient_id}, ${registration.doctor_id},
+          'DRAFT',
           ${input.principal.internalUserId}, ${input.principal.internalUserId}
         ) returning id, public_id
       `
-
       const recordId = rows[0]!.id
 
-      await insertHistory(transaction, recordId, input.principal.internalUserId)
+      const versionRows = await transaction.$queryRaw<
+        readonly { readonly id: bigint }[]
+      >`
+        insert into public.medical_record_versions (
+          medical_record_id, version_number, version_kind, status,
+          author_doctor_id, subjective, blood_pressure_systolic, blood_pressure_diastolic,
+          temperature_celsius, weight_kg, height_cm, assessment, plan,
+          created_by_user_id, updated_by_user_id
+        ) values (
+          ${recordId}, 1, 'INITIAL', 'DRAFT',
+          ${registration.doctor_id}, ${input.subjective}, ${input.bloodPressureSystolic},
+          ${input.bloodPressureDiastolic}, ${input.temperatureCelsius}, ${input.weightKg},
+          ${input.heightCm}, ${input.assessment}, ${input.plan},
+          ${input.principal.internalUserId}, ${input.principal.internalUserId}
+        ) returning id
+      `
+      const mrvId = versionRows[0]!.id
+
+      await transaction.$executeRaw`
+        update public.medical_records
+        set current_version_id = ${mrvId}
+        where id = ${recordId}
+      `
+
+      for (let i = 0; i < input.actions.length; i++) {
+        const action = input.actions[i]!
+        await transaction.$executeRaw`
+          insert into public.medical_actions (
+            medical_record_version_id, action_name, notes, sort_order,
+            performed_by_doctor_id, created_by_user_id
+          ) values (
+            ${mrvId}, ${action.actionName}, ${action.notes ?? null}, ${i + 1},
+            ${registration.doctor_id}, ${input.principal.internalUserId}
+          )
+        `
+      }
 
       const fullRows = await transaction.$queryRaw<readonly MedicalRecordRow[]>(Prisma.sql`
         select ${recordColumns} ${recordJoins} where mr.id = ${recordId}
@@ -319,28 +376,29 @@ export const medicalRecordRepository: MedicalRecordRepository = {
           readonly patient_id: bigint
           readonly registration_id: bigint
           readonly public_id: string
-          readonly status: string
+          readonly lifecycle_status: string
           readonly row_version: number
-          readonly doctor_id: bigint
+          readonly author_doctor_id: bigint
           readonly finalized_at: Date | null
+          readonly current_version_id: bigint
         }[]
       >`
-        select id, patient_id, registration_id, public_id, status, row_version, doctor_id, finalized_at from public.medical_records where public_id = cast(${input.medicalRecordPublicId} as uuid) for update
+        select id, patient_id, registration_id, public_id, lifecycle_status, row_version, author_doctor_id, finalized_at, current_version_id from public.medical_records where public_id = cast(${input.medicalRecordPublicId} as uuid) for update
       `
 
       const current = lockRows[0]
       if (!current) return { status: 'NOT_FOUND' }
       if (current.row_version !== input.rowVersion) return { status: 'VERSION_CONFLICT' }
 
-      if (current.status === 'FINAL' && input.status !== 'AMENDED') {
+      if (current.lifecycle_status === 'FINAL' && input.status !== 'AMENDED') {
         return { status: 'LOCKED_RECORD' }
       }
 
-      if (input.status === 'AMENDED' && current.status !== 'FINAL') {
+      if (input.status === 'AMENDED' && current.lifecycle_status !== 'FINAL') {
         return { status: 'INVALID_STATUS_TRANSITION' }
       }
 
-      if (input.status === 'FINAL' && current.status === 'AMENDED') {
+      if (input.status === 'FINAL' && current.lifecycle_status === 'AMENDED') {
         return { status: 'INVALID_STATUS_TRANSITION' }
       }
 
@@ -357,31 +415,133 @@ export const medicalRecordRepository: MedicalRecordRepository = {
         }
       }
 
+      const versionRows = await transaction.$queryRaw<
+        readonly {
+          readonly version_number: number
+          readonly version_kind: string
+        }[]
+      >`select version_number, version_kind from public.medical_record_versions where id = ${current.current_version_id}`
+      
+      const currentVersion = versionRows[0]!
+
+      let mrvId = current.current_version_id
+      const isAmending = input.status === 'AMENDED'
+      
+      if (isAmending) {
+        const nextVersionNum = currentVersion.version_number + 1
+        const newVersionRows = await transaction.$queryRaw<
+          readonly { readonly id: bigint }[]
+        >`
+          insert into public.medical_record_versions (
+            medical_record_id, version_number, version_kind, status,
+            supersedes_version_id, author_doctor_id,
+            subjective, blood_pressure_systolic, blood_pressure_diastolic,
+            temperature_celsius, weight_kg, height_cm, assessment, plan,
+            correction_reason,
+            created_by_user_id, updated_by_user_id
+          )
+          select
+            medical_record_id, ${nextVersionNum}, 'CORRECTION', 'DRAFT',
+            id, author_doctor_id,
+            subjective, blood_pressure_systolic, blood_pressure_diastolic,
+            temperature_celsius, weight_kg, height_cm, assessment, plan,
+            ${input.amendmentReason ?? null},
+            ${input.principal.internalUserId}, ${input.principal.internalUserId}
+          from public.medical_record_versions where id = ${current.current_version_id}
+          returning id
+        `
+        mrvId = newVersionRows[0]!.id
+
+        await transaction.$executeRaw`
+          update public.medical_records
+          set current_version_id = ${mrvId},
+              updated_by_user_id = ${input.principal.internalUserId}
+          where id = ${current.id}
+        `
+        
+        await transaction.$executeRaw`
+          insert into public.medical_actions (
+            medical_record_version_id, action_name, notes, sort_order,
+            performed_by_doctor_id, created_by_user_id
+          )
+          select ${mrvId}, action_name, notes, sort_order,
+                 performed_by_doctor_id, ${input.principal.internalUserId}
+          from public.medical_actions
+          where medical_record_version_id = ${current.current_version_id}
+        `
+      } else {
+        await transaction.$executeRaw`
+          update public.medical_records
+          set updated_by_user_id = ${input.principal.internalUserId}
+          where id = ${current.id}
+        `
+      }
+
       const setClauses: Prisma.Sql[] = [
         Prisma.sql`updated_by_user_id = ${input.principal.internalUserId}`,
       ]
 
       if (input.subjective !== undefined)
         setClauses.push(Prisma.sql`subjective = ${input.subjective}`)
-      if (input.objective !== undefined) setClauses.push(Prisma.sql`objective = ${input.objective}`)
+      if (input.bloodPressureSystolic !== undefined)
+        setClauses.push(Prisma.sql`blood_pressure_systolic = ${input.bloodPressureSystolic}`)
+      if (input.bloodPressureDiastolic !== undefined)
+        setClauses.push(Prisma.sql`blood_pressure_diastolic = ${input.bloodPressureDiastolic}`)
+      if (input.temperatureCelsius !== undefined)
+        setClauses.push(Prisma.sql`temperature_celsius = ${input.temperatureCelsius}`)
+      if (input.weightKg !== undefined)
+        setClauses.push(Prisma.sql`weight_kg = ${input.weightKg}`)
+      if (input.heightCm !== undefined)
+        setClauses.push(Prisma.sql`height_cm = ${input.heightCm}`)
       if (input.assessment !== undefined)
         setClauses.push(Prisma.sql`assessment = ${input.assessment}`)
       if (input.plan !== undefined) setClauses.push(Prisma.sql`plan = ${input.plan}`)
-
-      if (input.status !== undefined) setClauses.push(Prisma.sql`status = ${input.status}`)
-      if (input.amendmentReason !== undefined)
-        setClauses.push(Prisma.sql`amendment_reason = ${input.amendmentReason}`)
-      if (input.finalizedAt) setClauses.push(Prisma.sql`finalized_at = clock_timestamp()`)
+      
+      const newStatus = input.status === 'FINAL' ? 'FINAL' : 'DRAFT'
+      setClauses.push(Prisma.sql`status = ${newStatus}`)
+      
+      if (input.finalizedAt) {
+        setClauses.push(Prisma.sql`finalized_at = clock_timestamp()`)
+        setClauses.push(Prisma.sql`finalized_by_user_id = ${input.principal.internalUserId}`)
+      }
+      
+      if (input.amendmentReason !== undefined) {
+        setClauses.push(Prisma.sql`correction_reason = ${input.amendmentReason}`)
+      }
 
       const setFragment = Prisma.join(setClauses, ', ')
 
       await transaction.$executeRaw(Prisma.sql`
-        update public.medical_records
+        update public.medical_record_versions
         set ${setFragment}
-        where id = ${current.id}
+        where id = ${mrvId}
       `)
+      
+      if (input.finalizedAt) {
+        await transaction.$executeRaw(Prisma.sql`
+          update public.medical_records
+          set lifecycle_status = 'FINAL', finalized_at = clock_timestamp()
+          where id = ${current.id}
+        `)
+      }
 
-      await insertHistory(transaction, current.id, input.principal.internalUserId)
+      if (input.actions !== undefined) {
+        await transaction.$executeRaw`
+          delete from public.medical_actions where medical_record_version_id = ${mrvId}
+        `
+        for (let i = 0; i < input.actions.length; i++) {
+          const action = input.actions[i]!
+          await transaction.$executeRaw`
+            insert into public.medical_actions (
+              medical_record_version_id, action_name, notes, sort_order,
+              performed_by_doctor_id, created_by_user_id
+            ) values (
+              ${mrvId}, ${action.actionName}, ${action.notes ?? null}, ${i + 1},
+              ${current.author_doctor_id}, ${input.principal.internalUserId}
+            )
+          `
+        }
+      }
 
       const fullRows = await transaction.$queryRaw<readonly MedicalRecordRow[]>(Prisma.sql`
         select ${recordColumns} ${recordJoins} where mr.id = ${current.id}
@@ -414,7 +574,6 @@ export const medicalRecordRepository: MedicalRecordRepository = {
         values (${record.id}, ${input.principal.internalUserId}, ${input.reason})
       `
 
-      // Ideally we would add an audit log here
       return { status: 'CREATED' }
     })
   },
@@ -463,7 +622,7 @@ export const medicalRecordRepository: MedicalRecordRepository = {
 
       const rows = await transaction.$queryRaw<readonly MedicalRecordRow[]>(Prisma.sql`
         select ${recordColumns} ${recordJoins} where 1 = 1 ${filterFragment}
-        order by mr.visit_date desc, mr.created_at desc
+        order by r.service_date desc, mr.created_at desc
         limit ${input.query.limit} offset ${offset}
       `)
 

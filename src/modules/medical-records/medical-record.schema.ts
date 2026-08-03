@@ -18,21 +18,37 @@ export const medicalRecordIdParamsSchema = z.strictObject({
 
 export const createMedicalRecordBodySchema = z.strictObject({
   assessment: soapField,
-  objective: soapField,
+  bloodPressureSystolic: z.number().nullable().optional().default(null),
+  bloodPressureDiastolic: z.number().nullable().optional().default(null),
+  temperatureCelsius: z.number().nullable().optional().default(null),
+  weightKg: z.number().nullable().optional().default(null),
+  heightCm: z.number().nullable().optional().default(null),
   plan: soapField,
   registrationId: z.uuid('Identitas pendaftaran belum sesuai.'),
   subjective: soapField,
+  actions: z.array(z.strictObject({
+    actionName: z.string().trim().min(1, 'Tindakan wajib diisi.'),
+    notes: soapField,
+  })).default([]),
 })
 
 export const updateMedicalRecordBodySchema = z.strictObject({
   assessment: soapField,
-  objective: soapField,
+  bloodPressureSystolic: z.number().nullable().optional(),
+  bloodPressureDiastolic: z.number().nullable().optional(),
+  temperatureCelsius: z.number().nullable().optional(),
+  weightKg: z.number().nullable().optional(),
+  heightCm: z.number().nullable().optional(),
   plan: soapField,
   rowVersion: z
     .number({ error: 'Versi data wajib disertakan.' })
     .int('Versi data belum sesuai.')
     .positive('Versi data belum sesuai.'),
   subjective: soapField,
+  actions: z.array(z.strictObject({
+    actionName: z.string().trim().min(1, 'Tindakan wajib diisi.'),
+    notes: soapField,
+  })).optional(),
 })
 
 export const amendMedicalRecordBodySchema = z.strictObject({
@@ -42,13 +58,21 @@ export const amendMedicalRecordBodySchema = z.strictObject({
     .min(1, 'Alasan perubahan wajib diisi.')
     .max(1_000, 'Alasan perubahan tidak dapat melebihi 1.000 karakter.'),
   assessment: soapField,
-  objective: soapField,
+  bloodPressureSystolic: z.number().nullable().optional().default(null),
+  bloodPressureDiastolic: z.number().nullable().optional().default(null),
+  temperatureCelsius: z.number().nullable().optional().default(null),
+  weightKg: z.number().nullable().optional().default(null),
+  heightCm: z.number().nullable().optional().default(null),
   plan: soapField,
   rowVersion: z
     .number({ error: 'Versi data wajib disertakan.' })
     .int('Versi data belum sesuai.')
     .positive('Versi data belum sesuai.'),
   subjective: soapField,
+  actions: z.array(z.strictObject({
+    actionName: z.string().trim().min(1, 'Tindakan wajib diisi.'),
+    notes: soapField,
+  })).default([]),
 })
 
 export const finalizeMedicalRecordBodySchema = z.strictObject({

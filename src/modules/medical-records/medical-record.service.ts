@@ -104,9 +104,14 @@ export const createMedicalRecordService = ({
       ...input,
       registrationPublicId: input.data.registrationId,
       assessment: input.data.assessment,
-      objective: input.data.objective,
+      bloodPressureSystolic: input.data.bloodPressureSystolic,
+      bloodPressureDiastolic: input.data.bloodPressureDiastolic,
+      temperatureCelsius: input.data.temperatureCelsius,
+      weightKg: input.data.weightKg,
+      heightCm: input.data.heightCm,
       plan: input.data.plan,
       subjective: input.data.subjective,
+      actions: input.data.actions,
     })
 
     if (result.status === 'REGISTRATION_NOT_FOUND') {
@@ -140,9 +145,14 @@ export const createMedicalRecordService = ({
       medicalRecordPublicId: input.medicalRecordId,
       rowVersion: input.data.rowVersion,
       assessment: input.data.assessment,
-      objective: input.data.objective,
+      bloodPressureSystolic: input.data.bloodPressureSystolic,
+      bloodPressureDiastolic: input.data.bloodPressureDiastolic,
+      temperatureCelsius: input.data.temperatureCelsius,
+      weightKg: input.data.weightKg,
+      heightCm: input.data.heightCm,
       plan: input.data.plan,
       subjective: input.data.subjective,
+      actions: input.data.actions,
     })
 
     if (result.status === 'NOT_FOUND') throw getMedicalRecordNotFoundError()
@@ -182,9 +192,14 @@ export const createMedicalRecordService = ({
       medicalRecordPublicId: input.medicalRecordId,
       rowVersion: input.data.rowVersion,
       assessment: input.data.assessment,
-      objective: input.data.objective,
+      bloodPressureSystolic: input.data.bloodPressureSystolic,
+      bloodPressureDiastolic: input.data.bloodPressureDiastolic,
+      temperatureCelsius: input.data.temperatureCelsius,
+      weightKg: input.data.weightKg,
+      heightCm: input.data.heightCm,
       plan: input.data.plan,
       subjective: input.data.subjective,
+      actions: input.data.actions,
       amendmentReason: input.data.amendmentReason,
       status: 'AMENDED',
     })

@@ -21,7 +21,11 @@ export interface MedicalRecordRecord {
   readonly polyclinicName: string
   readonly visitDate: Date
   readonly subjective: string | null
-  readonly objective: string | null
+  readonly bloodPressureSystolic: number | null
+  readonly bloodPressureDiastolic: number | null
+  readonly temperatureCelsius: number | null
+  readonly weightKg: number | null
+  readonly heightCm: number | null
   readonly assessment: string | null
   readonly plan: string | null
   readonly status: MedicalRecordStatus
@@ -30,6 +34,7 @@ export interface MedicalRecordRecord {
   readonly rowVersion: number
   readonly createdAt: Date
   readonly updatedAt: Date
+  readonly actions: readonly MedicalActionData[]
 }
 
 export interface MedicalActionData {
@@ -55,7 +60,11 @@ export interface MedicalRecordData {
   readonly polyclinicName: string
   readonly visitDate: string
   readonly subjective: string | null
-  readonly objective: string | null
+  readonly bloodPressureSystolic: number | null
+  readonly bloodPressureDiastolic: number | null
+  readonly temperatureCelsius: number | null
+  readonly weightKg: number | null
+  readonly heightCm: number | null
   readonly assessment: string | null
   readonly plan: string | null
   readonly status: MedicalRecordStatus
@@ -70,7 +79,11 @@ export interface MedicalRecordData {
 export interface MedicalRecordMutationData {
   readonly registrationId: string
   readonly subjective: string | null
-  readonly objective: string | null
+  readonly bloodPressureSystolic: number | null
+  readonly bloodPressureDiastolic: number | null
+  readonly temperatureCelsius: number | null
+  readonly weightKg: number | null
+  readonly heightCm: number | null
   readonly assessment: string | null
   readonly plan: string | null
   readonly actions: readonly MedicalActionMutationData[]
@@ -78,7 +91,11 @@ export interface MedicalRecordMutationData {
 
 export interface MedicalRecordUpdateData {
   readonly subjective?: string | null | undefined
-  readonly objective?: string | null | undefined
+  readonly bloodPressureSystolic?: number | null | undefined
+  readonly bloodPressureDiastolic?: number | null | undefined
+  readonly temperatureCelsius?: number | null | undefined
+  readonly weightKg?: number | null | undefined
+  readonly heightCm?: number | null | undefined
   readonly assessment?: string | null | undefined
   readonly plan?: string | null | undefined
   readonly actions?: readonly MedicalActionMutationData[] | undefined
@@ -87,7 +104,11 @@ export interface MedicalRecordUpdateData {
 
 export interface MedicalRecordAmendmentData {
   readonly subjective: string | null
-  readonly objective: string | null
+  readonly bloodPressureSystolic: number | null
+  readonly bloodPressureDiastolic: number | null
+  readonly temperatureCelsius: number | null
+  readonly weightKg: number | null
+  readonly heightCm: number | null
   readonly assessment: string | null
   readonly plan: string | null
   readonly actions: readonly MedicalActionMutationData[]
