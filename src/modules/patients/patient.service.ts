@@ -44,6 +44,19 @@ interface PatientServiceDependencies {
 }
 
 const patientManagementRoles = new Set(['ADMINISTRATOR', 'REGISTRATION_OFFICER'])
+const patientReadRoles = new Set(['ADMINISTRATOR', 'REGISTRATION_OFFICER', 'DOCTOR'])
+
+const assertCanReadPatients = (input: PatientRequestContext): void => {
+  if (patientReadRoles.has(input.principal.role)) {
+    return
+  }
+
+  throw new DomainError(
+    'FORBIDDEN',
+    403,
+    'Tindakan ini tidak tersedia untuk akun yang sedang digunakan.',
+  )
+}
 
 const assertCanManagePatients = (input: PatientRequestContext): void => {
   if (patientManagementRoles.has(input.principal.role)) {
@@ -173,13 +186,13 @@ export const createPatientService = ({
     },
 
     listPatients: async (input) => {
-      assertCanManagePatients(input)
+      assertCanReadPatients(input)
       const result = await repository.listPatients({ ...input, ...input.query })
       return mapPatientList(result, input.query)
     },
 
     getPatient: async (input) => {
-      assertCanManagePatients(input)
+      assertCanReadPatients(input)
       const patient = await repository.findPatient({
         ...input,
         patientPublicId: input.patientId,
