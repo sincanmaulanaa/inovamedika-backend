@@ -4,6 +4,7 @@ import { argon2id, hash } from 'argon2'
 
 import { closeDatabase, prisma } from '../src/db/prisma.js'
 import type { Prisma } from '../src/generated/prisma/client.js'
+import { fakerID_ID as faker } from '@faker-js/faker'
 
 const advisoryLockNamespace = 84_621
 const advisoryLockKey = 2
@@ -74,26 +75,19 @@ const medications = [
   { code: 'ORALIT_SACHET', dosageForm: 'Serbuk oral', name: 'Oralit', strength: '200 mL' },
 ] as const
 
-const patients = [
-  {
-    address: 'Alamat sintetis untuk pengujian',
-    dateOfBirth: '1990-04-12',
-    fullName: 'Pasien Demo Satu',
-    nik: '3174000000000001',
-    normalizedPhone: '+6281200000001',
-    phone: '0812-0000-0001',
-    sex: 'FEMALE',
-  },
-  {
-    address: 'Alamat sintetis untuk pengujian',
-    dateOfBirth: '1985-09-23',
-    fullName: 'Pasien Demo Dua',
-    nik: '3174000000000002',
-    normalizedPhone: '+6281200000002',
-    phone: '0812-0000-0002',
-    sex: 'MALE',
-  },
-] as const
+const patients = Array.from({ length: 50 }).map(() => ({
+  address: faker.location.streetAddress(),
+  dateOfBirth: faker.date.birthdate({ min: 1, max: 80, mode: 'age' }).toISOString().split('T')[0],
+  fullName: faker.person.fullName(),
+  nik: faker.string.numeric(16),
+  phone: faker.phone.number({ style: 'national' }),
+  normalizedPhone: '', // We will generate this in the loop or set it to empty since faker phone can be complex
+  sex: faker.helpers.arrayElement(['MALE', 'FEMALE']),
+})).map(p => {
+  // Simple phone normalization for seed
+  const normalizedPhone = '+62' + p.phone.replace(/\D/g, '').replace(/^0/, '')
+  return { ...p, normalizedPhone }
+})
 
 const getConfiguration = (): {
   demoPassword: string
@@ -226,8 +220,9 @@ const seedDoctor = async (
 const seedPolyclinicsAndLanes = async (
   transaction: Prisma.TransactionClient,
   doctorId: bigint,
-): Promise<void> => {
+): Promise<{ polyclinicIds: Map<string, bigint>, queueLaneIds: Map<string, bigint> }> => {
   const polyclinicIds = new Map<string, bigint>()
+  const queueLaneIds = new Map<string, bigint>()
 
   for (const polyclinic of polyclinics) {
     const savedPolyclinic = await transaction.polyclinics.upsert({
@@ -258,7 +253,7 @@ const seedPolyclinicsAndLanes = async (
       throw new Error(`Missing polyclinic configuration for queue lane ${lane.code}`)
     }
 
-    await transaction.queue_lanes.upsert({
+    const savedLane = await transaction.queue_lanes.upsert({
       create: {
         code: lane.code,
         display_name: lane.displayName,
@@ -276,12 +271,16 @@ const seedPolyclinicsAndLanes = async (
       },
       where: { code: lane.code },
     })
+    queueLaneIds.set(lane.code, savedLane.id)
   }
+
+  return { polyclinicIds, queueLaneIds }
 }
 
-const seedPayers = async (transaction: Prisma.TransactionClient): Promise<void> => {
+const seedPayers = async (transaction: Prisma.TransactionClient): Promise<Map<string, bigint>> => {
+  const payerIds = new Map<string, bigint>()
   for (const payer of payers) {
-    await transaction.payers.upsert({
+    const saved = await transaction.payers.upsert({
       create: {
         code: payer.code,
         is_active: true,
@@ -295,7 +294,9 @@ const seedPayers = async (transaction: Prisma.TransactionClient): Promise<void> 
       },
       where: { code: payer.code },
     })
+    payerIds.set(payer.code, saved.id)
   }
+  return payerIds
 }
 
 const seedMedications = async (transaction: Prisma.TransactionClient): Promise<void> => {
@@ -322,11 +323,12 @@ const seedMedications = async (transaction: Prisma.TransactionClient): Promise<v
 const seedPatients = async (
   transaction: Prisma.TransactionClient,
   adminUserId: bigint,
-): Promise<void> => {
+): Promise<bigint[]> => {
+  const patientIds: bigint[] = []
   for (const patient of patients) {
     const dateOfBirth = new Date(`${patient.dateOfBirth}T00:00:00.000Z`)
 
-    await transaction.patients.upsert({
+    const saved = await transaction.patients.upsert({
       create: {
         address: patient.address,
         created_by_user_id: adminUserId,
@@ -350,7 +352,90 @@ const seedPatients = async (
       },
       where: { nik: patient.nik },
     })
+    patientIds.push(saved.id)
   }
+  return patientIds
+}
+
+const seedRegistrations = async (
+  transaction: Prisma.TransactionClient,
+  patientIds: bigint[],
+  doctorId: bigint,
+  polyclinicIds: Map<string, bigint>,
+  queueLaneIds: Map<string, bigint>,
+  payerIds: Map<string, bigint>,
+  adminUserId: bigint,
+) => {
+  const serviceDate = new Date()
+  serviceDate.setHours(0, 0, 0, 0)
+
+  const polyclinicId = polyclinicIds.get('POLI_UMUM')!
+  const queueLaneId = queueLaneIds.get('LANE_UMUM')!
+  const payerId = payerIds.get('BPJS')!
+
+  let counter = await transaction.queue_counters.findUnique({
+    where: {
+      service_date_queue_lane_id: { service_date: serviceDate, queue_lane_id: queueLaneId }
+    }
+  })
+
+  if (!counter) {
+    counter = await transaction.queue_counters.create({
+      data: { service_date: serviceDate, queue_lane_id: queueLaneId, last_sequence_number: 0, last_service_order: 0 }
+    })
+  }
+
+  let currentSequence = Number(counter.last_sequence_number)
+  let currentServiceOrder = Number(counter.last_service_order)
+
+  // Clear existing waiting queues for clean slate test
+  await transaction.queues.deleteMany({ where: { status: 'WAITING' } })
+  await transaction.registrations.deleteMany({ where: { status: { in: ['WAITING', 'CHECKED_IN'] } } })
+
+  const uniquePatients = faker.helpers.shuffle(patientIds).slice(0, 40)
+
+  for (let i = 0; i < 40; i++) {
+    const patientId = uniquePatients[i]
+    currentSequence++
+    currentServiceOrder++
+    const display_number = `UM-${currentSequence.toString().padStart(3, '0')}`
+
+    const registration = await transaction.registrations.create({
+      data: {
+        patient_id: patientId,
+        doctor_id: doctorId,
+        polyclinic_id: polyclinicId,
+        payer_id: payerId,
+        service_date: serviceDate,
+        financing_type: 'BPJS_KESEHATAN',
+        payer_member_number: faker.string.numeric(13),
+        visit_reason: faker.lorem.sentence(),
+        status: 'CHECKED_IN',
+        checked_in_at: serviceDate,
+        created_by_user_id: adminUserId,
+        updated_by_user_id: adminUserId,
+      }
+    })
+
+    await transaction.queues.create({
+      data: {
+        registration_id: registration.id,
+        queue_lane_id: queueLaneId,
+        service_date: serviceDate,
+        sequence_number: currentSequence,
+        service_order: currentServiceOrder,
+        display_number,
+        status: 'WAITING',
+        created_by_user_id: adminUserId,
+        updated_by_user_id: adminUserId,
+      }
+    })
+  }
+
+  await transaction.queue_counters.update({
+    where: { id: counter.id },
+    data: { last_sequence_number: currentSequence, last_service_order: currentServiceOrder }
+  })
 }
 
 const seedDatabase = async (
@@ -367,10 +452,11 @@ const seedDatabase = async (
 
   await seedPermissions(transaction, adminUserId)
   const doctorId = await seedDoctor(transaction, doctorUserId)
-  await seedPolyclinicsAndLanes(transaction, doctorId)
-  await seedPayers(transaction)
+  const { polyclinicIds, queueLaneIds } = await seedPolyclinicsAndLanes(transaction, doctorId)
+  const payerIds = await seedPayers(transaction)
   await seedMedications(transaction)
-  await seedPatients(transaction, adminUserId)
+  const patientIds = await seedPatients(transaction, adminUserId)
+  await seedRegistrations(transaction, patientIds, doctorId, polyclinicIds, queueLaneIds, payerIds, adminUserId)
 }
 
 const run = async (): Promise<void> => {

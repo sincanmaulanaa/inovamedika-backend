@@ -19,14 +19,38 @@ import {
 import { createHealthRouter } from './modules/health/health.routes.js'
 import { createAuthRouter } from './modules/auth/auth.routes.js'
 import { authService, type AuthService } from './modules/auth/auth.service.js'
+import { createAuditRouter } from './modules/audit/audit.routes.js'
+import { createDashboardRouter } from './modules/dashboard/dashboard.routes.js'
+import { createMasterDataRouter } from './modules/master-data/master-data.routes.js'
+import { createMedicalRecordRouter } from './modules/medical-records/medical-record.routes.js'
+import {
+  medicalRecordService,
+  type MedicalRecordService,
+} from './modules/medical-records/medical-record.service.js'
 import { createPatientRouter } from './modules/patients/patient.routes.js'
+import { createPrescriptionRouter } from './modules/prescriptions/prescription.routes.js'
+import {
+  prescriptionService,
+  type PrescriptionService,
+} from './modules/prescriptions/prescription.service.js'
 import { patientService, type PatientService } from './modules/patients/patient.service.js'
+import { createQueueRouter } from './modules/queues/queue.routes.js'
+import { queueService, type QueueService } from './modules/queues/queue.service.js'
+import { createRegistrationRouter } from './modules/registrations/registration.routes.js'
+import {
+  registrationService,
+  type RegistrationService,
+} from './modules/registrations/registration.service.js'
 
 interface AppOptions {
   allowedOrigins?: readonly string[]
   authenticationService?: AuthService
+  medicalRecordManagementService?: MedicalRecordService
   patientManagementService?: PatientService
+  prescriptionManagementService?: PrescriptionService
+  queueManagementService?: QueueService
   readinessCheck?: ReadinessCheck
+  registrationManagementService?: RegistrationService
 }
 
 interface HttpLogObject {
@@ -84,8 +108,13 @@ export const createApp = (options: AppOptions = {}): Express => {
   const app = express()
   const allowedOrigins = options.allowedOrigins ?? [env.frontendOrigin]
   const authenticationService = options.authenticationService ?? authService
+  const medicalRecordManagementService =
+    options.medicalRecordManagementService ?? medicalRecordService
   const patientManagementService = options.patientManagementService ?? patientService
+  const prescriptionManagementService = options.prescriptionManagementService ?? prescriptionService
+  const queueManagementService = options.queueManagementService ?? queueService
   const readinessCheck = options.readinessCheck ?? createDatabaseReadinessCheck(prisma)
+  const registrationManagementService = options.registrationManagementService ?? registrationService
 
   app.disable('x-powered-by')
 
@@ -131,6 +160,40 @@ export const createApp = (options: AppOptions = {}): Express => {
       service: patientManagementService,
     }),
   )
+  app.use(
+    '/api/v1/registrations',
+    createRegistrationRouter({
+      authenticationService,
+      service: registrationManagementService,
+    }),
+  )
+  app.use(
+    '/api/v1/queues',
+    createQueueRouter({
+      authenticationService,
+      service: queueManagementService,
+    }),
+  )
+  app.use(
+    '/api/v1/medical-records',
+    createMedicalRecordRouter({
+      authenticationService,
+      service: medicalRecordManagementService,
+    }),
+  )
+  app.use(
+    '/api/v1/prescriptions',
+    createPrescriptionRouter({
+      authenticationService,
+      service: prescriptionManagementService,
+    }),
+  )
+  app.use(
+    '/api/v1/audit-logs',
+    createAuditRouter({ authenticationService: options.authenticationService ?? authService }),
+  )
+  app.use('/api/v1/dashboard', createDashboardRouter({ authenticationService }))
+  app.use('/api/v1/master-data', createMasterDataRouter({ authenticationService }))
   app.use('/api/v1/health', createHealthRouter(readinessCheck))
 
   app.use(notFoundHandler)

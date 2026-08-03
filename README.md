@@ -101,6 +101,22 @@ recorded in the append-only audit trail. Audit metadata records the operation an
 changed field names, but never copies NIK, addresses, phone numbers, or complete
 patient payloads.
 
+
+## Audit Trails
+
+All sensitive actions across the system (login, patient access, medical record viewing/export, etc) are captured in the `audit_logs` table.
+- `GET /api/v1/audit-logs` allows `ADMINISTRATOR` or `AUDITOR` to view all audit logs with pagination and filters (by user, resource, IP address).
+- `POST /api/v1/audit-logs/patient-export-requests` securely logs manual or automated patient medical record exports.
+
+## Medical Record Corrections
+
+Clinical data integrity is strictly enforced according to Permenkes 24/2022 Pasal 16.
+- Doctors can freely amend medical records using `POST /api/v1/medical-records/:id/amend` within 2x24 hours of finalization.
+- After 48 hours, the record is locked (`CORRECTION_REQUEST_REQUIRED`).
+- To amend an expired record, a doctor must first request a correction via `POST /api/v1/medical-records/:id/correction-requests`.
+- A PMIK or Facility Leader (`ADMINISTRATOR`) can approve the request via `POST /api/v1/medical-records/correction-requests/:id/approve`.
+- Once approved, the doctor may amend the medical record again.
+
 ## Database workflow
 
 - `pnpm db:generate` generates the typed Prisma client into `src/generated/prisma`.
